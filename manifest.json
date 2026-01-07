@@ -1722,10 +1722,10 @@
   },
   "files": {
     "app.R": {
-      "checksum": "635922e7e34904e388df21637e2ad8dd"
+      "checksum": "3a0b9d82277be9d1c3ea2e9de15a13ee"
     },
     "pantry.db": {
-      "checksum": "b1d396dd5d7c26107d6c2b7b9052db5f"
+      "checksum": "8ea1a58500986d9b2f35a3af461afde8"
     }
   },
   "users": null

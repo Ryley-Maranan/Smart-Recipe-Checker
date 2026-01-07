@@ -5,26 +5,6 @@ library(shiny)
 library(shinyWidgets)
 library(DT)
 
-# Create / connect to SQLite database
-con <- dbConnect(SQLite(), "pantry.db")
-
-# Create tables
-dbExecute(con, "
-  CREATE TABLE IF NOT EXISTS pantry (
-    ingredient TEXT PRIMARY KEY,
-    quantity REAL,
-    unit TEXT
-  )
-")
-
-dbExecute(con, "
-  CREATE TABLE IF NOT EXISTS recipes (
-    name TEXT PRIMARY KEY,
-    ingredients TEXT,
-    servings INTEGER
-  )
-")
-
 # Colors (warm brown tones)
 colors <- list(
   header = "#8B5E3C",
@@ -42,17 +22,16 @@ ingredient_units <- data.frame(
                  "Water Spinach", "Onion", "Canton Noodles", "Shrimp",
                  "Carrot", "Cabbage", "Pork Belly", "Salt", "Pepper", "Oil",
                  "Peanut Butter", "Banana Blossom", "Eggplant", "String Beans", 
-                 "Annatto", "Oxtail"),
+                 "Annatto", "Oxtail", "Taro Leaves", "Mung Beans"),
   Unit = c("grams", "ml", "ml", "cloves", "pieces", "tsp", "grams", "grams", 
            "grams", "grams", "grams", "pieces", "grams", "grams", "grams", 
            "grams", "grams", "tsp", "tsp", "ml", "grams", "grams", "grams", 
-           "grams", "tsp", "grams"),
+           "grams", "tsp", "grams", "grams", "grams"),
   stringsAsFactors = FALSE
 )
 
-# Filipino recipes (updated format)
+# Filipino recipes
 recipes <- list(
-  
   "Adobo" = list(
     ingredients = list(
       list(name="Chicken", qty=1000, unit="grams"),
@@ -64,7 +43,6 @@ recipes <- list(
     ),
     servings = 4
   ),
-  
   "Sinigang na Baboy" = list(
     ingredients = list(
       list(name="Pork", qty=800, unit="grams"),
@@ -76,7 +54,6 @@ recipes <- list(
     ),
     servings = 4
   ),
-  
   "Pancit Canton" = list(
     ingredients = list(
       list(name="Canton Noodles", qty=200, unit="grams"),
@@ -88,7 +65,6 @@ recipes <- list(
     ),
     servings = 3
   ),
-  
   "Lechon Kawali" = list(
     ingredients = list(
       list(name="Pork Belly", qty=1000, unit="grams"),
@@ -98,7 +74,6 @@ recipes <- list(
     ),
     servings = 4
   ),
-  
   "Kare-Kare" = list(
     ingredients = list(
       list(name="Oxtail", qty=800, unit="grams"),
@@ -110,7 +85,6 @@ recipes <- list(
     ),
     servings = 4
   ),
-  
   "Tinolang Manok" = list(
     ingredients = list(
       list(name="Chicken", qty=1000, unit="grams"),
@@ -122,7 +96,6 @@ recipes <- list(
     ),
     servings = 4
   ),
-  
   "Chicken Afritada" = list(
     ingredients = list(
       list(name="Chicken", qty=800, unit="grams"),
@@ -135,7 +108,6 @@ recipes <- list(
     ),
     servings = 4
   ),
-  
   "Menudo" = list(
     ingredients = list(
       list(name="Pork", qty=700, unit="grams"),
@@ -148,7 +120,6 @@ recipes <- list(
     ),
     servings = 4
   ),
-  
   "Bicol Express" = list(
     ingredients = list(
       list(name="Pork Belly", qty=600, unit="grams"),
@@ -160,7 +131,6 @@ recipes <- list(
     ),
     servings = 4
   ),
-  
   "Laing" = list(
     ingredients = list(
       list(name="Taro Leaves", qty=50, unit="grams"),
@@ -171,7 +141,6 @@ recipes <- list(
     ),
     servings = 3
   ),
-  
   "Ginisang Monggo" = list(
     ingredients = list(
       list(name="Mung Beans", qty=200, unit="grams"),
@@ -182,7 +151,6 @@ recipes <- list(
     ),
     servings = 4
   ),
-  
   "Chicken Curry (Filipino Style)" = list(
     ingredients = list(
       list(name="Chicken", qty=900, unit="grams"),
@@ -194,30 +162,11 @@ recipes <- list(
     ),
     servings = 4
   )
-  
 )
 
-
-
-# Initialize pantry with default stock if empty
-check_pantry <- dbGetQuery(con, "SELECT COUNT(*) as count FROM pantry")
-if(check_pantry$count == 0) {
-  initial_stock <- data.frame(
-    ingredient = c("Chicken", "Soy Sauce", "Vinegar", "Garlic", "Bay Leaf",
-                   "Peppercorns", "Pork", "Tamarind Paste", "Tomato", "Radish",
-                   "Water Spinach", "Onion", "Canton Noodles", "Shrimp",
-                   "Carrot", "Cabbage", "Pork Belly", "Salt", "Pepper", "Oil",
-                   "Peanut Butter", "Banana Blossom", "Eggplant", "String Beans", 
-                   "Annatto", "Oxtail"),
-    quantity = c(1000, 200, 150, 10, 5, 5, 500, 50, 100, 80, 50, 2, 200, 100, 
-                 80, 80, 500, 5, 5, 200, 0, 0, 0, 0, 0, 0),
-    unit = c("grams", "ml", "ml", "cloves", "pieces", "tsp", "grams", "grams", 
-             "grams", "grams", "grams", "pieces", "grams", "grams", "grams", 
-             "grams", "grams", "tsp", "tsp", "ml", "grams", "grams", "grams", 
-             "grams", "tsp", "grams"),
-    stringsAsFactors = FALSE
-  )
-  dbWriteTable(con, "pantry", initial_stock, append = TRUE)
+# Helper function to sanitize input IDs
+safe_id <- function(x) {
+  gsub("[^a-zA-Z0-9]", "_", x)
 }
 
 # UI
@@ -299,10 +248,46 @@ ui <- fluidPage(
 # Server
 server <- function(input, output, session) {
   
-  # Stock data as reactiveVal instead of reactive
-  stock_data <- reactiveVal(NULL)
+  # FIXED: Create database connection INSIDE server function
+  con <- dbConnect(SQLite(), "pantry.db")
   
-  reload_trigger <- reactiveVal(0)
+  # Create tables
+  dbExecute(con, "
+    CREATE TABLE IF NOT EXISTS pantry (
+      ingredient TEXT PRIMARY KEY,
+      quantity REAL,
+      unit TEXT
+    )
+  ")
+  
+  # Initialize pantry with default stock if empty
+  check_pantry <- dbGetQuery(con, "SELECT COUNT(*) as count FROM pantry")
+  if(check_pantry$count == 0) {
+    initial_stock <- data.frame(
+      ingredient = c("Chicken", "Soy Sauce", "Vinegar", "Garlic", "Bay Leaf",
+                     "Peppercorns", "Pork", "Tamarind Paste", "Tomato", "Radish",
+                     "Water Spinach", "Onion", "Canton Noodles", "Shrimp",
+                     "Carrot", "Cabbage", "Pork Belly", "Salt", "Pepper", "Oil",
+                     "Peanut Butter", "Banana Blossom", "Eggplant", "String Beans", 
+                     "Annatto", "Oxtail", "Taro Leaves", "Mung Beans"),
+      quantity = c(1000, 200, 150, 10, 5, 5, 500, 50, 100, 80, 50, 2, 200, 100, 
+                   80, 80, 500, 5, 5, 200, 0, 0, 0, 0, 0, 0, 0, 0),
+      unit = c("grams", "ml", "ml", "cloves", "pieces", "tsp", "grams", "grams", 
+               "grams", "grams", "grams", "pieces", "grams", "grams", "grams", 
+               "grams", "grams", "tsp", "tsp", "ml", "grams", "grams", "grams", 
+               "grams", "tsp", "grams", "grams", "grams"),
+      stringsAsFactors = FALSE
+    )
+    dbWriteTable(con, "pantry", initial_stock, append = TRUE)
+  }
+  
+  # Disconnect on session end
+  session$onSessionEnded(function() {
+    dbDisconnect(con)
+  })
+  
+  # Stock data as reactiveVal
+  stock_data <- reactiveVal(NULL)
   
   # Load stock from database
   load_stock <- function(){
@@ -311,10 +296,8 @@ server <- function(input, output, session) {
     return(data)
   }
   
-  # Initialize stock on startup
-  observe({
-    load_stock()
-  })
+  # FIXED: Call load_stock() once on startup instead of observe()
+  load_stock()
   
   selected_recipe <- reactiveVal(NULL)
   missing_ingredients <- reactiveVal(NULL)
@@ -350,8 +333,6 @@ server <- function(input, output, session) {
     current_stock <- stock_data()
     active_stock <- current_stock[current_stock$Quantity > 0, ]
     
-    cat("Rendering stock table. Active items:", nrow(active_stock), "\n")
-    
     DT::datatable(
       active_stock,
       editable = list(target = 'cell', disable = list(columns = c(0, 2))),
@@ -371,8 +352,6 @@ server <- function(input, output, session) {
     req(stock_data())
     current_stock <- stock_data()
     empty_stock <- current_stock[current_stock$Quantity == 0, ]
-    
-    cat("Rendering empty table. Empty items:", nrow(empty_stock), "\n")
     
     DT::datatable(
       empty_stock,
@@ -398,7 +377,7 @@ server <- function(input, output, session) {
       
       dbExecute(con, "UPDATE pantry SET quantity = ? WHERE ingredient = ?", 
                 params = list(new_quantity, actual_ingredient))
-      load_stock()  # Reload
+      load_stock()
     }
   })
   
@@ -406,7 +385,6 @@ server <- function(input, output, session) {
   observeEvent(input$add_to_stock_btn, {
     req(input$add_quantity)
     
-    # Get ingredient name and unit based on mode
     if(input$ingredient_mode == "select") {
       req(input$add_ingredient)
       ingredient <- input$add_ingredient
@@ -423,24 +401,20 @@ server <- function(input, output, session) {
     }
     
     quantity <- input$add_quantity
-    
-    # Check if ingredient exists
     existing <- dbGetQuery(con, "SELECT quantity FROM pantry WHERE ingredient = ?", 
                            params = list(ingredient))
     
     if(nrow(existing) > 0) {
-      # Update existing
       new_qty <- existing$quantity + quantity
       dbExecute(con, "UPDATE pantry SET quantity = ? WHERE ingredient = ?", 
                 params = list(new_qty, ingredient))
     } else {
-      # Insert new
       dbExecute(con, "INSERT INTO pantry (ingredient, quantity, unit) VALUES (?, ?, ?)", 
                 params = list(ingredient, quantity, unit))
     }
     
     showNotification(paste("Added", quantity, unit, "of", ingredient), type = "message")
-    reload_trigger(reload_trigger() + 1)  # Trigger reload
+    load_stock()
     
     if(input$ingredient_mode == "custom") {
       updateTextInput(session, "custom_ingredient", value = "")
@@ -476,7 +450,7 @@ server <- function(input, output, session) {
            paste(ingredients_text, collapse="\n"))
   })
   
-  # Cook button - deducts ingredients from stock
+  # Cook button
   observeEvent(input$cook_btn, {
     req(selected_recipe())
     recipe <- selected_recipe()
@@ -492,10 +466,9 @@ server <- function(input, output, session) {
       }
     }
     
-    showNotification(paste("Cooked", input$recipe_input, "successfully! Ingredients deducted from pantry."), 
+    showNotification(paste("Cooked", input$recipe_input, "successfully!"), 
                      type = "message", duration = 5)
-    
-    load_stock()  # Reload
+    load_stock()
     
     current_stock <- stock_data()
     missing <- lapply(recipe$ingredients, function(ing) {
@@ -525,61 +498,48 @@ server <- function(input, output, session) {
     paste(alternatives, collapse=", ")
   })
   
-  # Shopping list with checkboxes and custom quantity inputs
+  # Shopping list with FIXED input IDs
   output$shopping_list_ui <- renderUI({
     missing <- missing_ingredients()
     
-    if (is.null(missing) || length(missing) == 0) {
-      return(tags$p(
-        style = "color: green; font-weight: bold;",
-        "✓ You have all ingredients!"
-      ))
+    if(is.null(missing) || length(missing) == 0) {
+      return(tags$p(style="color: green; font-weight: bold;", "✓ You have all ingredients!"))
     }
     
     shopping_items <- lapply(seq_along(missing), function(i) {
       ing <- missing[[i]]
+      safe_name <- safe_id(ing$name)  # FIXED: Sanitize ID
       
       fluidRow(
-        style = "margin-bottom: 5px;",
-        
-        column(
-          width = 6,
-          checkboxInput(
-            inputId = paste0("shop_", ing$name),
-            label = paste0(ing$name, " (", ing$qty, " ", ing$unit, ")"),
-            value = FALSE
-          )
-        ),
-        
-        column(
-          width = 6,
-          numericInput(
-            inputId = paste0("shop_qty_", ing$name),
-            label = NULL,
-            value = ing$qty,
-            min = 0,
-            step = 10
-          )
-        )
+        style="margin-bottom: 5px;",
+        column(6, checkboxInput(
+          inputId=paste0("shop_", safe_name),
+          label=paste0(ing$name, " (", ing$qty, " ", ing$unit, ")"),
+          value=FALSE
+        )),
+        column(6, numericInput(
+          inputId=paste0("shop_qty_", safe_name),
+          label=NULL,
+          value=ing$qty,
+          min=0,
+          step=10
+        ))
       )
     })
     
     tagList(
       shopping_items,
-      actionButton(
-        "add_checked_btn",
-        "Add Selected to Pantry",
-        icon = icon("shopping-cart"),
-        style = "width: 100%; margin-top: 10px;"
-      )
+      actionButton("add_checked_btn", "Add Selected to Pantry",
+                   icon=icon("shopping-cart"),
+                   style="width: 100%; margin-top: 10px;")
     )
   })
   
-  # Add checked shopping items to stock with custom quantities
+  # Add checked shopping items with FIXED ID lookup
   observeEvent(input$add_checked_btn, {
     missing <- missing_ingredients()
     if(is.null(missing) || length(missing) == 0) {
-      showNotification("No missing ingredients", type = "warning")
+      showNotification("No missing ingredients", type="warning")
       return()
     }
     
@@ -587,63 +547,43 @@ server <- function(input, output, session) {
     added_items <- c()
     
     for(ing in missing) {
-      # Check if checkbox is checked
-      checkbox_id <- paste0("shop_", ing$name)
+      safe_name <- safe_id(ing$name)  # FIXED: Use sanitized ID
+      checkbox_id <- paste0("shop_", safe_name)
+      qty_id <- paste0("shop_qty_", safe_name)
+      
       checkbox_value <- input[[checkbox_id]]
       
-      cat("Checking:", ing$name, "Checkbox value:", checkbox_value, "\n")  # Debug
-      
       if(!is.null(checkbox_value) && isTRUE(checkbox_value)) {
-        # Get the custom quantity entered by user
-        qty_id <- paste0("shop_qty_", ing$name)
         custom_qty <- input[[qty_id]]
         
-        cat("Custom qty for", ing$name, ":", custom_qty, "\n")  # Debug
-        
         if(is.null(custom_qty) || custom_qty <= 0) {
-          showNotification(paste("Invalid quantity for", ing$name), type = "warning")
+          showNotification(paste("Invalid quantity for", ing$name), type="warning")
           next
         }
         
-        # Check if exists in database
         existing <- dbGetQuery(con, "SELECT quantity FROM pantry WHERE ingredient = ?", 
-                               params = list(ing$name))
+                               params=list(ing$name))
         
         if(nrow(existing) > 0) {
-          # Update existing
           new_qty <- existing$quantity + custom_qty
           dbExecute(con, "UPDATE pantry SET quantity = ? WHERE ingredient = ?", 
-                    params = list(new_qty, ing$name))
-          cat("Updated", ing$name, "to", new_qty, "\n")  # Debug
+                    params=list(new_qty, ing$name))
         } else {
-          # Insert new
           dbExecute(con, "INSERT INTO pantry (ingredient, quantity, unit) VALUES (?, ?, ?)", 
-                    params = list(ing$name, custom_qty, ing$unit))
-          cat("Inserted", ing$name, "with", custom_qty, "\n")  # Debug
+                    params=list(ing$name, custom_qty, ing$unit))
         }
         added <- added + 1
         added_items <- c(added_items, ing$name)
       }
     }
     
-    cat("Total added:", added, "\n")  # Debug
-    
     if(added > 0) {
-      showNotification(paste("Added", added, "items:", paste(added_items, collapse=", ")), 
-                       type = "message", duration = 5)
+      showNotification(paste("Added", added, "items"), type="message", duration=5)
+      load_stock()
       
-      # Force reload by incrementing trigger
-      new_val <- reload_trigger() + 1
-      cat("Setting reload_trigger to:", new_val, "\n")  # Debug
-      reload_trigger(new_val)
-      
-      # Small delay to ensure database is updated
-      Sys.sleep(0.1)
-      
-      # Recheck recipe to update shopping list and cook button
       recipe <- selected_recipe()
       if(!is.null(recipe)) {
-        current_stock <- load_stock()
+        current_stock <- stock_data()
         missing_new <- lapply(recipe$ingredients, function(ing) {
           qty_in_stock <- current_stock$Quantity[current_stock$Ingredient == ing$name]
           if(length(qty_in_stock) == 0 || qty_in_stock < ing$qty) {
@@ -653,17 +593,10 @@ server <- function(input, output, session) {
         })
         missing_new <- Filter(Negate(is.null), missing_new)
         missing_ingredients(missing_new)
-        cat("Updated missing ingredients. New count:", length(missing_new), "\n")  # Debug
       }
     } else {
-      showNotification("No items selected. Please check the boxes for items you want to add.", 
-                       type = "warning")
+      showNotification("No items selected", type="warning")
     }
-  })
-  
-  # Disconnect database on session end
-  session$onSessionEnded(function() {
-    dbDisconnect(con)
   })
 }
 
