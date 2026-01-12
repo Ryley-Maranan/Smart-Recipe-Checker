@@ -183,6 +183,9 @@ safe_id <- function(x) {
 # Login UI
 login_ui <- fluidPage(
   tags$head(
+    tags$title("🍳 Recipe Checker")  # <-- ADD THIS NEW LINE HERE
+  ),
+  tags$head(
     tags$style(HTML(sprintf("
       body {
         background: linear-gradient(135deg, %s 0%%, %s 100%%);
@@ -248,6 +251,9 @@ login_ui <- fluidPage(
 
 # Main UI
 main_ui <- fluidPage(
+  tags$head(
+    tags$title("🍳 Recipe Checker")  # <-- ADD THIS NEW LINE HERE
+  ),
   tags$head(
     tags$style(HTML(sprintf("
       body {background-color: %s; color: %s; padding-top: 50px;}
